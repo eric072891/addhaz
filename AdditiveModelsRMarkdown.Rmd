@@ -1,0 +1,375 @@
+---
+title: "Additive Hazards Models"
+author: "Eric Olberding"
+date: "4/24/2020"
+output:
+  html_document: default
+  word_document: default
+  toc: true
+  toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load}
+library(survival)
+lar= read.table("C:/GlobalDocs/Survival Analysis/hw5/larynxd.txt")
+colnames(lar)= c('stage', 'time', 'age', 'year', 'status')
+```
+
+## Additive Hazards Model
+
+The general additive hazards model is:
+$$h[t|\mathbf{Z}(t)] = \beta_0(t)+\sum_{i=1}^{p}\beta_{i}(t)\mathbf{Z}_{i}(t)$$
+Here, $\mathbf{Z}(t) = (\mathbf{Z}_{1}(t),...,\mathbf{Z}_{p}(t))$ is a vector of the, possibly, time varying covariates. Note that, generally, the coefficients for each covariate may also vary over time. If they do vary, they are called regression *functions* instead of *coefficients*. 
+
+We note two important things. First, the baseline hazard at time $t$ is the hazard when an individual has all covariates equal to $0$. Second, there is nothing preventing the hazard, in an additive hazard model, from being negative.
+
+## Aalen's Additive Hazards Model
+For some additive hazards models, we use regression *coefficients* $\beta$. For the *Aalen's Additive Hazards Model*, this is not the case. This model uses regression *functions*. Since we do not assume anything about the regression functions, $\beta(t)$, the model is nonparameteric.
+
+### Why use Aalen's Additive Hazards?
+* These models are flexible enough to model the effect of a covariate on the hazard, even when the proportional hazards assumption isn't met.
+* It's fairly easy to estimate how the effect of a covariate changes over time.
+* Relative risk (hazard ratios) may sometimes be misleading. If the hazard is very small, does a hazard ratio of 10 really matter?
+* A negative estimated hazard rate is not really an issue, if we only care about how much the covariates affect the hazard rate.
+* Interaction effects can be more closely examined. Coefficients may be positive in an additive model and negative in a multiplicative  model (like CoxPH).
+
+### Estimation of the Regression Functions
+For Aalen's additive hazards model, we don't use likelihood estimation. We use ordinary least squares techniques. In practice, direct estimation of $\beta_i(t)$ is difficult. Instead of estimating the regression functions directly, we estimate the cumulative regression functions $B_i(t)=\int_0^{t}\beta_i(u)du$. This is similar to Nelson-Allen estimation of the cumulative hazard.
+
+Let $p$ be the number of covariates and $n$ the number of individuals. Let $\mathbf{X}(t)$ be the $n\times(p+1)$ design matrix where row $i$ is the observed set of covariates for the $ith$ individual at time $t$, $(1,Z_{i1}(t),...Z_{ip}(t))$. Let $\mathbf{I}(t)$ be an $n\times1$ vector where the $i$th entry is $1$ if subject $i$ dies at time $t$ and $0$ otherwise. Then,
+$$\hat{\mathbf{B}}(t) = \sum_{T_i\leq t}[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\mathbf{X}^t(T_i)\mathbf{I}(T_i)$$
+The estimator $\hat{\mathbf{B}}(t)$ only exists up to the smallest time at which $\mathbf{X}^t(T_i)\mathbf{X}(T_i)$ becomes singular.
+We also have the variance-covariance matrix of the cumulative regression function estimates.
+
+$$\hat{Var}(\hat{\mathbf{B}}(t)) = \sum_{T_i\leq t}[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\mathbf{X}^t(T_i)\mathbf{I}^D(T_i)\mathbf{X}(T_i)\{[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\}^t$$
+
+These can be used to find the $95$% naive pointwise confidence interval at time $t$ for a particular cumulative regression function.
+$$\hat{B}_k(t)\pm1.96\sqrt{\hat{Var}(\hat{B}_k(t))}$$
+
+### Testing Covariates for Significance
+
+In this section, we describe testing if $\beta_j(t) = 0$ for all observed $t$.The test statistic we use and the covariance matrix for it are *very* similar to what we have above. One difference is that the index of the sum ranges over all observation times. The other is the inclusion of a diagonal weights matrix $\mathbf{W}(t)$ with diagonal elements $\mathbf{W}_j(t)$ for $j=1,...,p+1$. The vector of test statistics $U$ is then
+$$\mathbf{U} = \sum_{T_i}\mathbf{W}(T_i)[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\mathbf{X}^t(T_i)\mathbf{I}(T_i)$$
+$\mathbf{U}$ is a vector were the $j+1$st entry is the test statistic for the hypothesis $\beta_j(t) = 0$. Similarly, the covariance matrix of the statistic is
+$$\mathbf{V} = \sum_{T_i}\mathbf{W}(T_i)[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\mathbf{X}^t(T_i)\mathbf{I}^D(T_i)\mathbf{X}(T_i)\{[\mathbf{X}^t(T_i)\mathbf{X}(T_i)]^{-1}\}^t\mathbf{W}(T_i)$$
+Aalen suggests $\mathbf{W}(t)=\{diag[[\mathbf{X}^t(t)\mathbf{X}(t)]^{-1}\}^{-1}$, but this weighting has issues when testing the equality of more than two treatments/samples. When testing for simulaneous equality of many regression functions, Aalen's weighting will lead to different test statistics, depending on which group is chosen as the baseline (Bhattacharyya and Klein 2005). Other weights can be chosen. Huffer and McKeague (1991) use simulation studies to show that the unweighted estimator (weight matrix is the identity matrix) works just as well as an efficiently weighted estimator unless you have a very large dataset. Another weight matrix is one consisting of diagonal entries equal to the number at risk at time $t$.
+
+If $\mathbf{J}$ is a subset of $\{0,...,p+1\}$, we can test whether the corresponding subset of regression functions are simultaneously $0$ using $x=\mathbf{U}^t_{\mathbf{J}}\mathbf{V}^{-1}_{\mathbf{J}}\mathbf{U}_{\mathbf{J}}$. Here, $x$ is a single value and we compare it to a Chi Squared random variable with $|J|$ degrees of freedom to find its p-value. If we are testing whether 3 regression functions are simulataneously 0, we use a Chi Squared with 3 degrees of freedom.
+
+### Testing for Constancy
+
+In the above section, we were testing to see if $\beta_j(t) = 0 \quad \forall t$. In this section, we describe statistics that can be used to test if the regression function is constant, $\beta_j(t) = c$ for some constant $c$ and all $t$. Let $\tau_F$ be the final observed time.
+
+The Kolmogorov-Smirnov Suprememum test looks at:
+
+$$sup_{0\leq t\leq \tau_F}|\hat{B}(t)-\frac{t}{\tau_F}\hat{B}(\tau_F)|$$
+If the $\beta_i(t)$ were constant, this supremum would be very small. This follows from $B(t) = \int_0^t \beta(u)du = ct$. The distribution you compare the statistic to is the Kolmogorov distribution. The **timereg** package does this for you and produces an associated p-value.
+
+Another test for constancy is the Cramer-von Mises test. this is basically the same test as above.
+
+$$\int_0^{\tau_F}|\hat{B}(t)-\frac{t}{\tau_F}\hat{B}(\tau_F)|^2dt$$
+The **timereg** package also computes this for fitted additive models. The book **Dynamic Regression Models for Survival Data** by
+Martinussen and Scheike covers many models and statistics for survival data. It also provides examples of how to use the **timereg** package.
+
+
+### Application in R
+To actually fit an Aalen's additive hazards model, we use the *aareg* function in the *survival* package.
+
+```{r 1}
+#fit the additive model
+mod1 = aareg(Surv(time, status) ~ as.factor(stage)+year, data=lar)
+```
+
+The **aareg** object is returned. If we enter the object into the console, we get
+
+```{r 2}
+#Similar output to the summary function
+mod1
+```
+
+We can see the global test at the bottom has a p-value 0.04 with 4 degrees of freedom. Not all regression functions are identically 0. Notice that we get an estimate of the *slope* of the cumulative regression functions. The estimate of the slope is an approximation of the mean of the regression function $\beta_j(t)$. This doesn't capture the time varying nature of the regression functions. For that, we use plots.
+
+The cumulative regression function plots can be used to analyze the effect of the covariate at time $t$ by looking at its slope at time $t$. Plots of the regression functions themselves would make interpretation easier. However, if we want to actually see the regression functions, we need to use a kernel smoother. As far as I'm aware, this is not currently implemented in R for cumulative regression functions (4/24/2020) (see appendix). 
+
+```{r 3}
+par(mfrow = c(2,3))
+plot(mod1)
+```
+
+We can also access the test statistic $U$ and its variance matrix $V$. We use this to confirm the global test statistic from the summary function.
+
+```{r 4}
+#Test Statistic
+mod1$test.statistic
+
+#Associated variance
+mod1$test.var
+
+#compute global test Chi Sq,  we must remove the intercept term
+chisq = t(mod1$test.statistic[2:4])%*%solve(mod1$test.var[2:4,2:4])%*%mod1$test.statistic[2:4]
+chisq
+```
+
+## Semiparametric Additive Hazards Model
+
+In Lin and Ying's additive hazards model, the time varying regression functions $\beta_j(t)$ are replace by *constants* $\beta_j$.
+
+$$h[t|\mathbf{Z}(t)] = \beta_0(t)+\sum_{i=1}^{p}\beta_{i}\mathbf{Z}_{i}(t)$$
+In between Aalen's additive hazards model and Lin and Ying's, we have McKeague and Sasieni's model. Here, some of the $\beta_j(t)$ are considered constant and some are allowed to vary over time.
+
+We sometimes prefer constant regression coefficients.
+
+* If we have a small dataset, we may wish to reduce the variance associated with a very flexible model like the Aalen's additive hazards model (a typical bias-variance trade-off situation). 
+* Constant coefficients may be easier to interpret and report.
+* The effect of the covariate might actually be constant over time.
+
+### Timereg Package
+
+The **timereg** package uses the same function to fit all three of the above models. For a covariate $Z_i(t)$, the corresponding $\beta_j$ is allowed to vary over time, unless we use the **const** function on the covariate. We fit additive models with the **aalen** function.
+
+For this model, we set the maximum time to be 4.3. With time varying covariates, the model matrix changes over time. This means that invertibility issues may arise for some time points and not others. In our data, there are invertibility issues involving the model matrix beyond time 4.3. If we set **silent=0**, the **timereg** package will let us know where the first singularity occurs. The statistics and plots will also look strange if there are invertibility issues.
+
+```{r timereg}
+library(timereg)
+
+fit1 = aalen(Surv(time, status) ~ year + as.factor(stage), data=lar, residuals = 1,max.time = 4.3, silent = 0)
+```
+
+The cumulative regression plots in this package have a horizontal line at $0$ for comparison.
+
+```{r timereg 2}
+par(mfrow = c(2,3))
+plot(fit1)
+```
+
+Examining the slope of the **stage 3** cumulative regression function, it appears that it initially increases risk/hazard compared to the baseline, and then has less/no effect between years 2 and 4. The effect of **year** looks like it may be constant over time.
+
+The summary function for this displays tests not available in the **survival** package. We test for significance, $H_0: B_i(t)=0 \quad \forall t$, as we did before. We also test for constant regression functions, $H_0: \beta_i(t) = c \quad \forall t$. The **summary** functions lists the test statistic values, and then the associated p-values.
+
+```{r timereg 3}
+summary(fit1)
+```
+
+According to these p-values, all regression functions, except **stage 3**, are constant over time. Typically, we remove insignificant covariates since the model is sensitive to design matrix being full rank. However, we'll set the effect of **year** to be constant for demonstration purposes.
+
+```{r timereg 4}
+fit2 = aalen(Surv(time, status) ~ const(year) + as.factor(stage), data=lar, residuals = 1, max.time = 4.4)
+
+par(mfrow = c(2,2))
+plot(fit2)
+```
+
+The cumulative regression function for **year** isn't plotted, as its effect doesn't vary over time. When the regression function for a covariate is constant, it is easier to interpret its effect on the baseline hazard. The constant coefficient for **year** and its p-value are provided by the **summary** function.
+
+```{r timereg 5}
+summary(fit2)
+```
+
+To interpret the coefficient for **year**, we say that the excess hazard of dying is 0 for a one unit increase in year at diagnosis. Note that **stage 3** has the only regression function varying over time, according to the appropriate p-values.
+
+Generally, we first remove insignificant covariates. Then, we set covariates effects to be constant, in accordance with the appropriate tests, until we have the minimum number of time varying regression functions necessary.
+
+
+Now, we construct survival curves for those with stage 1 larynx cancer and those with stage 4 larynx cancer who are diagnosed in the year 1970. We use the fact that $H(t) = B_0(t) +\sum_{i=1}^pB_i(p)Z_i(t)$ and $S(t)=exp(-H(t))$. Note that, since additive hazard models can have negative hazards, the surival curve may not monotonically decrease.
+
+```{r survcurve}
+# Patient who is in stage 1 and was diagnosed in 1970
+x0<-c(1,0,0,0); #choose values for time varying effect covariates
+z0<-c(70)       #choose values for time invariant effect covariates
+
+# gamma contains parametric (constant) coefficients
+S1<-exp(- x0 %*% t(fit2$cum[,-1])- fit2$cum[,1]*sum(z0*fit2$gamma))
+
+
+
+# Patient who is in stage 4 and was diagnosed in 1970
+x0<-c(1,0,0,1); #choose values for time varying effect covariates
+z0<-c(70)       #choose values for time invariant effect covariates
+
+# gamma contains parametric (constant) coefficients
+S4<-exp(- x0 %*% t(fit2$cum[,-1])- fit2$cum[,1]*sum(z0*fit2$gamma))
+
+
+par(mfrow=c(1,2))
+plot(fit2$cum[,1],S1,type="l",ylim=c(0,1),xlab="Time (years)",
+     ylab="Survival", main = "Stage 1")
+plot(fit2$cum[,1],S4,type="l",ylim=c(0,1),xlab="Time (years)",
+     ylab="Survival", main = "Stage 4")
+
+
+```
+
+## Goodness of Fit
+
+To check the goodness of fit, we use cumulative martingale residuals. Below, we check the fit of **year** in the fully nonparameteric model. To do this, we must split continuous variables into groups. We do this based upon the covariate's quartiles. The following only works for the fully nonparametric Aalen model (no constant coefficients) in the *timereg* package.
+
+```{r goodness}
+fit3 = aalen(Surv(time, status) ~ year, data=lar, residuals = 1, max.time 
+             =4.3)
+
+#For the covariate year
+X<-model.matrix(~-1+cut(year,quantile(year), include.lowest=TRUE),
+                lar)
+
+colnames(X)<-c("1. quartile","2. quartile","3. quartile","4. quartile")
+
+#cumulative martingale residuals
+resids = cum.residuals(fit3, lar, X, n.sim=1000)
+
+#plots them, summary provides statistics for correctness of functional form
+par(mfrow = c(2,2))
+plot(resids)
+summary(resids)
+```
+
+If the horizontal line at 0 lies within the 95% confidence intervals and the central line is relatively straight, the fit is good. Here, we see that the functional form of **year** is correct. This is also indicated by the test statistics.
+
+Below, we wanted to see if the log of the **year** variable poorly fits. It also fits well. 
+
+```{r GOF 2}
+#new functional form
+lar$logyear = log(lar$year)
+
+fit4 = aalen(Surv(time, status) ~ logyear, data=lar, residuals = 1, silent=0, max.time = 4.3)
+
+
+#For the covariate year
+X<-model.matrix(~-1+cut(logyear,quantile(logyear),
+                        include.lowest=TRUE), lar)
+
+colnames(X)<-c("1. quartile","2. quartile","3. quartile","4. quartile")
+
+resids = cum.residuals(fit4, lar, X, n.sim=1000)
+
+par(mfrow = c(2,2))
+plot(resids)
+summary(resids)
+```
+
+# References
+
+* Aalen O. O., Borgan Ø., Gjessing H. K. (2008). Event History Analysis: A Process Point of View. Dordrecht: Springer. 
+
+* Klein J. P.,  Moeschberger M. L. (2003). Survival analysis: Techniques for censored and truncated data. New York: Springer. 
+
+* Scheike T. H., Martinussen T. (2006). Dynamic Regression models for survival data. New-York: Springer. 
+
+# Appendix (Kernel-Smoothed Regression Function Estimates)
+
+The following kernel-smoother was constructed using chapters 6 and 10 from the Klein and Moeschberger survival analysis text. It only works for models fit by the *timereg* package.
+
+```{r smooth regression functions}
+
+#kernel smoothing function to plot the regression functions
+#instead of the cumulative regression functions
+
+#fitting the Aalen model from chapter 10 of KM (2003)
+lar$cent.age = lar$age-mean(lar$age)
+fit4 = aalen(Surv(time, status) ~ cent.age+as.factor(stage), data=lar, residuals = 1,max.time = 4.3, silent = 0)
+
+#This only works for additive models from the timereg package
+regression.functions = function(model, bw){
+  
+  #define symmetric biweight kernel
+  kernel = function(x){
+    out = 0
+    if(x<=1 && x>=-1){
+    out = 15/16*(1-x^2)^2
+    }
+    out
+  }
+  
+  
+  #define smoothing at time t
+  smoothed = function(t, model, coef, bw){
+    value = 0
+   
+    delta = model$cum[2:nrow(model$cum),
+                    coef]-model$cum[1:(nrow(model$cum)-1),coef]
+    
+    
+    if(bw<=t && t<=(model$cum[nrow(model$cum),1]-bw)){
+      for(i in 2:nrow(model$cum)){
+        value = value + (1/bw)*kernel((t-model$cum[i,1])/bw)*delta[i-1]
+      }
+    }
+    #modification for times in the left tail
+    else if(t<bw){
+      q = t/bw
+      
+      alpha.num = 64*(8-24*q+48*q^2-45*q^3+15*q^4)
+      beta.num = 1120*(1-q)^3
+      
+      denom = (1+q)^5*(81-168*q+126*q^2-40*q^3+5*q^4)
+      
+      for(i in 2:nrow(model$cum)){
+      value = value+(1/bw)*kernel((t-model$cum[i,1])/bw)*
+            (alpha.num/denom + beta.num/denom *
+            (t-model$cum[i,1])/bw)*delta[i-1]
+      }
+    }
+    #modification for times in the right tail
+    else if((model$cum[nrow(model$cum),1]-bw)<t){
+            q = (model$cum[nrow(model$cum),1]-t)/bw
+      
+      alpha.num = 64*(8-24*q+48*q^2-45*q^3+15*q^4)
+      beta.num = 1120*(1-q)^3
+      
+      denom = (1+q)^5*(81-168*q+126*q^2-40*q^3+5*q^4)
+      
+      for(i in 2:nrow(model$cum)){
+      value = value+(1/bw)*kernel((model$cum[i,1]-t)/bw)*
+            (alpha.num/denom + beta.num/denom *
+            (model$cum[i,1]-t)/bw)*delta[i-1]
+      }
+    }
+    value
+  }
+  
+  
+  #time points for the smoothed regression function
+  t = seq(from = model$cum[1,1], to = model$cum[nrow(model$cum),1], by = 0.001)
+  
+  #list where each element is a smoothed estimate for 
+  #one of the regression functions
+  reg.funcs = list()
+  for(i in 2:ncol(model$cum)){
+    reg.funcs[i]=smoothed(t[1], model, i, bw)
+    for(j in t[2:length(t)]){
+      reg.funcs[[i]] = append(reg.funcs[[i]], smoothed(j, model, i, bw))
+    }
+  }
+  reg.funcs
+}
+
+#get the regression functions Beta for fit4
+r = regression.functions(model = fit4, bw = 1)
+
+#plot them
+plot(1, type="n", xlab="Time(year*1000)", ylab="Beta(t) for Stage", xlim=c(0, 4000), ylim=c(-0.2, 0.8))
+#stage 2
+lines(r[[4]], col="black", lty=1)
+#stage 3
+lines(r[[5]], col="blue",lty=2)
+#stage 4
+lines(r[[6]], col="red",lty=3)
+#horizontal reference line
+abline(h=0, lty=2)
+
+# Add a legend
+legend(500, 0.8, legend=c("Stage 2", "Stage 3", "Stage 4"),
+       col=c("black", "blue", "red"), lty=1:3, cex=0.8)
+```
+
+From these kernel-smoothed estimates, $\hat{\beta(t)}$, we can see that the excess risk due to stage 3 larynx cancer vanishes after 2 years. We can also see that having stage 2 larynx cancer might not increase risk of dying at all. The plot (and the stored regression function values) can be used for more precise reporting of the excess risk at specific times. At year 1 (1000 on the x-axis), those with stage 4 larynx cancer have a 0.4 excess risk of dying compared to baseline.
+As always, care must be taken when using kernel-smoothing estimates. The estimates depend heavily on the bandwidth.
+
+
+This plot is very similar to the one found in Klein and Moeschberger (2003). If anyone wants to implement different kernels (Epanechnikov) from the Biweight kernel, please do!
+
+![KM Smoothed Estimates for Regression Functions](/Users/lo/Documents/kmstages.jpg)
